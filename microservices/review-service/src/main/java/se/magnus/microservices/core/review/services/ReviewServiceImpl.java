@@ -1,12 +1,16 @@
 package se.magnus.microservices.core.review.services;
 
-import java.util.ArrayList;
 import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import se.magnus.api.core.review.Review;
 import se.magnus.api.core.review.ReviewService;
 import se.magnus.api.exceptions.InvalidInputException;
@@ -14,39 +18,67 @@ import se.magnus.microservices.core.review.persistence.ReviewEntity;
 import se.magnus.microservices.core.review.persistence.ReviewRepository;
 import se.magnus.util.http.ServiceUtil;
 
-@RestController
-public class ReviewServiceImpl implements ReviewService {
+import static java.util.logging.Level.FINE;
 
-  private static final Logger LOG = LoggerFactory.getLogger(ReviewServiceImpl.class);
+@RestController
+public class ReviewServiceImpl implements ReviewService
+{
+
+  private static final Logger LOG = LoggerFactory.getLogger( ReviewServiceImpl.class );
   private final ServiceUtil serviceUtil;
   private final ReviewRepository repository;
   private final ReviewMapper mapper;
+  private final Scheduler jdbcScheduler;
 
   @Autowired
-  public ReviewServiceImpl(ReviewRepository repository, ReviewMapper mapper, ServiceUtil serviceUtil) {
+  public ReviewServiceImpl( @Qualifier( "jdbcScheduler" ) Scheduler jdbcScheduler, ReviewRepository repository,
+                            ReviewMapper mapper, ServiceUtil serviceUtil )
+  {
+    this.jdbcScheduler = jdbcScheduler;
     this.repository = repository;
     this.mapper = mapper;
     this.serviceUtil = serviceUtil;
   }
 
   @Override
-  public List<Review> getReviews(int productId) {
+  public Mono<Review> createReview( Review body )
+  {
+    if ( body.getProductId() < 1 )
+    {
+      throw new InvalidInputException( "Invalid productId: " + body.getProductId() );
+    }
+    return Mono.fromCallable( () -> internalCreateReview( body ) ).subscribeOn( jdbcScheduler );
+  }
+
+  @Override
+  public Flux<Review> getReviews( int productId )
+  {
+
+    if ( productId < 1 )
+    {
+      throw new InvalidInputException( "Invalid productId: " + productId );
+    }
+
+    LOG.info( "Will get reviews for product with id={}", productId );
+
+    return Mono.fromCallable( () -> internalGetReviews( productId ) )
+        .flatMapMany( Flux::fromIterable )
+        .log( LOG.getName(), FINE )
+        .subscribeOn( jdbcScheduler );
+  }
+
+  @Override
+  public Mono<Void> deleteReviews( int productId )
+  {
 
     if (productId < 1) {
       throw new InvalidInputException("Invalid productId: " + productId);
     }
 
-    List<ReviewEntity> entityList = repository.findByProductId(productId);
-    List<Review> list = mapper.entityListToApiList(entityList);
-    list.forEach(e -> e.setServiceAddress(serviceUtil.getServiceAddress()));
-
-    LOG.debug("getReviews: response size: {}", list.size());
-
-    return list;
+    return Mono.fromRunnable(() -> internalDeleteReviews(productId)).subscribeOn(jdbcScheduler).then();
   }
 
-  @Override
-  public Review createReview( Review body )
+  private Review internalCreateReview( Review body )
   {
     try
     {
@@ -62,10 +94,20 @@ public class ReviewServiceImpl implements ReviewService {
     }
   }
 
-  @Override
-  public void deleteReviews( int productId )
+  private List<Review> internalGetReviews( int productId )
   {
-    LOG.debug( "deleteReviews: tries to delete reviews for the product with productId: {}", productId );
-    repository.deleteAll( repository.findByProductId( productId ) );
+    List<ReviewEntity> entityList = repository.findByProductId( productId );
+    List<Review> list = mapper.entityListToApiList( entityList );
+    list.forEach( e -> e.setServiceAddress( serviceUtil.getServiceAddress() ) );
+    LOG.debug( "Response size: {}", list.size() );
+    return list;
   }
+
+  private void internalDeleteReviews(int productId) {
+
+    LOG.debug("deleteReviews: tries to delete reviews for the product with productId: {}", productId);
+
+    repository.deleteAll(repository.findByProductId(productId));
+  }
+
 }

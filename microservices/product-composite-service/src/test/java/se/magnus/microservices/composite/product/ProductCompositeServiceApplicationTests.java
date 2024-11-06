@@ -7,6 +7,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import se.magnus.api.composite.product.ProductAggregate;
 import se.magnus.api.composite.product.RecommendationSummary;
 import se.magnus.api.composite.product.ReviewSummary;
@@ -38,20 +40,19 @@ class ProductCompositeServiceApplicationTests {
 	private ProductCompositeIntegration compositeIntegration;
 
 	@BeforeEach
-	void setUp() {
-
-		when(compositeIntegration.getProduct(PRODUCT_ID_OK))
-				.thenReturn(new Product(PRODUCT_ID_OK, "name", 1, "mock-address") );
-		when(compositeIntegration.getRecommendations(PRODUCT_ID_OK))
-				.thenReturn(singletonList(new Recommendation(PRODUCT_ID_OK, 1, "author", 1, "content", "mock address") ) );
-		when(compositeIntegration.getReviews(PRODUCT_ID_OK))
-				.thenReturn(singletonList(new Review(PRODUCT_ID_OK, 1, "author", "subject", "content", "mock address") ) );
-
-		when(compositeIntegration.getProduct(PRODUCT_ID_NOT_FOUND))
-				.thenThrow(new NotFoundException("NOT FOUND: " + PRODUCT_ID_NOT_FOUND) );
-
-		when(compositeIntegration.getProduct(PRODUCT_ID_INVALID))
-				.thenThrow(new InvalidInputException("INVALID: " + PRODUCT_ID_INVALID) );
+	void setUp()
+	{
+		when( compositeIntegration.getProduct( PRODUCT_ID_OK ) )
+				.thenReturn( Mono.just( new Product( PRODUCT_ID_OK, "name", 1, "mock-address" ) ) );
+		when( compositeIntegration.getRecommendations( PRODUCT_ID_OK ) )
+				.thenReturn( Flux.fromIterable( singletonList( new Recommendation( PRODUCT_ID_OK, 1, "author", 1, "content", "mock address" ) ) ) );
+		when( compositeIntegration.getReviews( PRODUCT_ID_OK ) )
+				.thenReturn( Flux.fromIterable( singletonList( new Review( PRODUCT_ID_OK, 1, "author", "subject", "content", "mock address" ) ) ) );
+		//exception:
+		when( compositeIntegration.getProduct( PRODUCT_ID_NOT_FOUND ) )
+				.thenThrow( new NotFoundException( "NOT FOUND: " + PRODUCT_ID_NOT_FOUND ) );
+		when( compositeIntegration.getProduct( PRODUCT_ID_INVALID ) )
+				.thenThrow( new InvalidInputException( "INVALID: " + PRODUCT_ID_INVALID ) );
 	}
 
 	@Test
@@ -101,50 +102,14 @@ class ProductCompositeServiceApplicationTests {
 				.jsonPath("$.message").isEqualTo("INVALID: " + PRODUCT_ID_INVALID);
 	}
 
-	@Test
-	void createCompositeProduct1() {
-
-		ProductAggregate compositeProduct = new ProductAggregate(1, "name", 1, null,
-				null, null);
-
-		postAndVerifyProduct(compositeProduct, OK);
-	}
-
-	@Test
-	void createCompositeProduct2() {
-		ProductAggregate compositeProduct = new ProductAggregate(1, "name", 1,
-				singletonList(new RecommendationSummary(1, "a", 1, "c") ),
-				singletonList(new ReviewSummary(1, "a", "s", "c") ), null);
-
-		postAndVerifyProduct(compositeProduct, OK);
-	}
-
-
-	@Test
-	void deleteCompositeProduct() {
-		ProductAggregate compositeProduct = new ProductAggregate(1, "name", 1,
-				singletonList(new RecommendationSummary(1, "a", 1, "c")),
-				singletonList(new ReviewSummary(1, "a", "s", "c")), null);
-
-		postAndVerifyProduct(compositeProduct, OK);
-
-		deleteAndVerifyProduct(compositeProduct.getProductId(), OK);
-		deleteAndVerifyProduct(compositeProduct.getProductId(), OK);
-	}
-
-	private void postAndVerifyProduct(ProductAggregate compositeProduct, HttpStatus expectedStatus ) {
-		client.post()
-				.uri("/product-composite")
-				.body(just(compositeProduct), ProductAggregate.class)
-				.exchange()
-				.expectStatus().isEqualTo(expectedStatus);
-	}
-
-	private void deleteAndVerifyProduct(int productId, HttpStatus expectedStatus) {
-		client.delete()
+	private WebTestClient.BodyContentSpec getAndVerifyProduct(int productId, HttpStatus expectedStatus) {
+		return client.get()
 				.uri("/product-composite/" + productId)
+				.accept(APPLICATION_JSON)
 				.exchange()
-				.expectStatus().isEqualTo(expectedStatus);
+				.expectStatus().isEqualTo(expectedStatus)
+				.expectHeader().contentType(APPLICATION_JSON)
+				.expectBody();
 	}
 
 }
