@@ -24,9 +24,11 @@ import static java.util.logging.Level.FINE;
 @RestController
 public class ProductCompositeServiceImpl implements ProductCompositeService
 {
+
   private static final Logger LOG = LoggerFactory.getLogger( ProductCompositeServiceImpl.class );
+
   private final ServiceUtil serviceUtil;
-  private ProductCompositeIntegration integration;
+  private final ProductCompositeIntegration integration;
 
   @Autowired
   public ProductCompositeServiceImpl( ServiceUtil serviceUtil, ProductCompositeIntegration integration )
@@ -65,20 +67,22 @@ public class ProductCompositeServiceImpl implements ProductCompositeService
 
       LOG.debug( "createCompositeProduct: composite entities created for productId: {}", body.getProductId() );
 
-      return Mono.zip( r -> "", monoList.toArray( new Mono[0] ) ).doOnError( ex -> LOG.warn( "createCompositeProduct failed: {}", ex.toString() ) ).then();
+      return Mono.zip( r -> "", monoList.toArray( new Mono[0] ) )
+          .doOnError( ex -> LOG.warn( "createCompositeProduct failed: {}", ex.toString() ) )
+          .then();
 
     }
     catch ( RuntimeException re )
     {
-      LOG.warn( "createCompositeProduct failed", re );
+      LOG.warn( "createCompositeProduct failed: {}", re.toString() );
       throw re;
     }
   }
 
-
   @Override
   public Mono<ProductAggregate> getProduct( int productId )
   {
+
     LOG.info( "Will get composite product info for product.id={}", productId );
     return Mono.zip(
             values -> createProductAggregate( (Product) values[0], (List<Recommendation>) values[1], (List<Review>) values[2], serviceUtil.getServiceAddress() ),
@@ -92,26 +96,31 @@ public class ProductCompositeServiceImpl implements ProductCompositeService
   @Override
   public Mono<Void> deleteProduct( int productId )
   {
-    try {
 
-      LOG.debug("deleteCompositeProduct: Deletes a product aggregate for productId: {}", productId);
+    try
+    {
+
+      LOG.debug( "deleteCompositeProduct: Deletes a product aggregate for productId: {}", productId );
 
       return Mono.zip(
               r -> "",
-              integration.deleteProduct(productId),
-              integration.deleteRecommendations(productId),
-              integration.deleteReviews(productId))
-          .doOnError(ex -> LOG.warn("delete failed: {}", ex.toString()))
-          .log(LOG.getName(), FINE).then();
+              integration.deleteProduct( productId ),
+              integration.deleteRecommendations( productId ),
+              integration.deleteReviews( productId ) )
+          .doOnError( ex -> LOG.warn( "delete failed: {}", ex.toString() ) )
+          .log( LOG.getName(), FINE ).then();
 
-    } catch (RuntimeException re) {
-      LOG.warn("deleteCompositeProduct failed: {}", re.toString());
+    }
+    catch ( RuntimeException re )
+    {
+      LOG.warn( "deleteCompositeProduct failed: {}", re.toString() );
       throw re;
     }
   }
 
   private ProductAggregate createProductAggregate( Product product, List<Recommendation> recommendations, List<Review> reviews, String serviceAddress )
   {
+
     // 1. Setup product info
     int productId = product.getProductId();
     String name = product.getName();
