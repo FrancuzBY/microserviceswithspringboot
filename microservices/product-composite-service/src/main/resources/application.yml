@@ -3,6 +3,9 @@ springdoc:
   api-docs.path: /openapi/v3/api-docs
   packagesToScan: se.magnus.microservices.composite.product
   pathsToMatch: /**
+  cache.disabled: true
+
+server.forward-headers-strategy: framework
 
 api:
 
@@ -130,6 +133,7 @@ logging:
   level:
     root: INFO
     se.magnus: DEBUG
+
 
 management.endpoint.health.show-details: "ALWAYS"
 management.endpoints.web.exposure.include: "*"
